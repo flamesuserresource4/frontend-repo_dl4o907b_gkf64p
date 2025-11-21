@@ -1,70 +1,92 @@
+import React, { useEffect, useState } from 'react'
+import Header from './components/Header'
+import PromptCard from './components/PromptCard'
+import TopList from './components/TopList'
+import AddPromptModal from './components/AddPromptModal'
+
+const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'
+
 function App() {
+  const [current, setCurrent] = useState(null)
+  const [top, setTop] = useState([])
+  const [open, setOpen] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  const fetchRandom = async () => {
+    setError('')
+    try {
+      const res = await fetch(`${BASE_URL}/api/prompts/random`)
+      if (!res.ok) throw new Error('Could not load a prompt')
+      const data = await res.json()
+      setCurrent(data)
+    } catch (e) {
+      setError(e.message)
+    }
+  }
+
+  const fetchTop = async () => {
+    try {
+      const res = await fetch(`${BASE_URL}/api/prompts/top?limit=5`)
+      if (res.ok) {
+        const data = await res.json()
+        setTop(data)
+      }
+    } catch {}
+  }
+
+  const vote = async (opt) => {
+    if (!current) return
+    const res = await fetch(`${BASE_URL}/api/votes`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt_id: current.id, option: opt })
+    })
+    if (res.ok) {
+      const updated = await res.json()
+      setCurrent(updated)
+      fetchTop()
+    }
+  }
+
+  const createPrompt = async (payload) => {
+    const res = await fetch(`${BASE_URL}/api/prompts`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+    if (!res.ok) throw new Error('Failed to create prompt')
+    const data = await res.json()
+    setCurrent(data)
+    fetchTop()
+  }
+
+  useEffect(() => {
+    Promise.all([fetchRandom(), fetchTop()]).finally(() => setLoading(false))
+  }, [])
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
-      {/* Subtle pattern overlay */}
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(59,130,246,0.05),transparent_50%)]"></div>
+      <div className="relative min-h-screen p-6 md:p-10 max-w-5xl mx-auto">
+        <Header onAddPrompt={() => setOpen(true)} />
 
-      <div className="relative min-h-screen flex items-center justify-center p-8">
-        <div className="max-w-2xl w-full">
-          {/* Header with Flames icon */}
-          <div className="text-center mb-12">
-            <div className="inline-flex items-center justify-center mb-6">
-              <img
-                src="/flame-icon.svg"
-                alt="Flames"
-                className="w-24 h-24 drop-shadow-[0_0_25px_rgba(59,130,246,0.5)]"
-              />
+        {loading ? (
+          <p className="text-blue-200">Loading game...</p>
+        ) : error ? (
+          <div className="bg-red-500/10 border border-red-500/30 text-red-200 p-4 rounded-xl">{error}</div>
+        ) : (
+          <div className="grid md:grid-cols-3 gap-6">
+            <div className="md:col-span-2 space-y-4">
+              <PromptCard prompt={current} onVote={vote} />
+              <div className="flex gap-3">
+                <button onClick={fetchRandom} className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/15 text-white border border-white/10">New random</button>
+              </div>
             </div>
-
-            <h1 className="text-5xl font-bold text-white mb-4 tracking-tight">
-              Flames Blue
-            </h1>
-
-            <p className="text-xl text-blue-200 mb-6">
-              Build applications through conversation
-            </p>
+            <TopList items={top} onRefresh={fetchTop} />
           </div>
+        )}
 
-          {/* Instructions */}
-          <div className="bg-slate-800/50 backdrop-blur-sm border border-blue-500/20 rounded-2xl p-8 shadow-xl mb-6">
-            <div className="flex items-start gap-4 mb-6">
-              <div className="flex-shrink-0 w-8 h-8 bg-blue-500 text-white rounded-lg flex items-center justify-center font-bold">
-                1
-              </div>
-              <div>
-                <h3 className="font-semibold text-white mb-1">Describe your idea</h3>
-                <p className="text-blue-200/80 text-sm">Use the chat panel on the left to tell the AI what you want to build</p>
-              </div>
-            </div>
-
-            <div className="flex items-start gap-4 mb-6">
-              <div className="flex-shrink-0 w-8 h-8 bg-blue-500 text-white rounded-lg flex items-center justify-center font-bold">
-                2
-              </div>
-              <div>
-                <h3 className="font-semibold text-white mb-1">Watch it build</h3>
-                <p className="text-blue-200/80 text-sm">Your app will appear in this preview as the AI generates the code</p>
-              </div>
-            </div>
-
-            <div className="flex items-start gap-4">
-              <div className="flex-shrink-0 w-8 h-8 bg-blue-500 text-white rounded-lg flex items-center justify-center font-bold">
-                3
-              </div>
-              <div>
-                <h3 className="font-semibold text-white mb-1">Refine and iterate</h3>
-                <p className="text-blue-200/80 text-sm">Continue the conversation to add features and make changes</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Footer */}
-          <div className="text-center">
-            <p className="text-sm text-blue-300/60">
-              No coding required • Just describe what you want
-            </p>
-          </div>
-        </div>
+        <AddPromptModal open={open} onClose={() => setOpen(false)} onCreate={createPrompt} />
       </div>
     </div>
   )
